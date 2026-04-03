@@ -9,12 +9,18 @@ set -e
 # Branch of CPython to clone
 # If changed, manually delete ./cpython/ directory if it exists.
 CPYTHON_BRANCH="${CPYTHON_BRANCH:-v3.13.2}"
-# Weather or not to asyncify and optimize using wasm-opt
+# Whether or not to asyncify and optimize using wasm-opt
 ASYNCIFY_OPTIMIZE="${ASYNCIFY_OPTIMIZE:-1}"
 OPTIMIZE_LEVEL="${OPTIMIZE_LEVEL:-2}"
 # Export the Python API, this increases output size by a little bit.
 # Not sure how usable it is.
 EXPORT_PYTHON_API="${EXPORT_PYTHON_API:-0}"
+
+# Ensure WASI_SDK_PATH is set
+if [ -z "$WASI_SDK_PATH" ]; then
+    echo "Error: WASI_SDK_PATH is not set. It is required to compile the custom C functions."
+    exit 1
+fi
 
 echo CPython branch: $CPYTHON_BRANCH
 echo Asyncify and Optimize: $ASYNCIFY_OPTIMIZE
@@ -41,8 +47,21 @@ fi
 # This will also undo if the script errors.
 pushd ./cpython/ > /dev/null
 
+# Compile the extra C file to an object file using the WASI-SDK
+echo "Compiling extra_funcs.c..."
+$WASI_SDK_PATH/bin/clang \
+    --target=wasm32-wasip1 \
+    --sysroot=$WASI_SDK_PATH/share/wasi-sysroot \
+    -O$OPTIMIZE_LEVEL \
+    -c ../extra_funcs.c -o ../extra_funcs.o
+
 export CFLAGS="-g -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I$OPT_DEPS_PATH/include"
 export CPPFLAGS="${CFLAGS}"
+
+# NEW: Update LIBS to include our object file and LDFLAGS to export the symbols
+# We use -Wl,--export to ensure the functions appear in the WASM export table.
+EXTRA_LDFLAGS="-Wl,--export=asyncify_malloc_buffer -Wl,--export=asyncify_free_buffer $(pwd)/../extra_funcs.o"
+
 export LIBS="-L$OPT_DEPS_PATH/lib"
 
 if [ $EXPORT_PYTHON_API -eq "1" ]
@@ -65,7 +84,7 @@ fi
 
 # Build python wasi
 echo Building python wasi
-python3 Tools/wasm/wasi.py configure-host -- --config-cache --includedir $OPT_DEPS_PATH/include --libdir $OPT_DEPS_PATH/lib --disable-test-modules --with-lto=full
+python3 Tools/wasm/wasi.py configure-host -- --config-cache --includedir $OPT_DEPS_PATH/include --libdir $OPT_DEPS_PATH/lib --disable-test-modules --with-lto=full LDFLAGS="$EXTRA_LDFLAGS"
 python3 Tools/wasm/wasi.py make-host
 
 # 'install' python into ./cross-build/wasm32-wasip1/tmp
