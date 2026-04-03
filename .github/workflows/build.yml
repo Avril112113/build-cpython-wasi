@@ -31,42 +31,56 @@ jobs:
       - name: CPython WASI Build in devcontainer
         uses: devcontainers/ci@v0.3
         with:
-          imageName: ghcr.io/avril112113/build_cpython_wasi
-          cacheFrom: ghcr.io/avril112113/build_cpython_wasi
+          imageName: ghcr.io/${{ github.event.repository.name }}/build_cpython_wasi
+          cacheFrom: ghcr.io/${{ github.event.repository.name }}/build_cpython_wasi
           push: always
           env: |
             CPYTHON_BRANCH=${{ inputs.cpython_branch }}
             OPTIMIZE_LEVEL=${{ inputs.optimize_level }}
           runCmd: ./build-wasi.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: CPython-WASI-${{ inputs.cpython_branch }}
           path: ./out/
           if-no-files-found: error
       
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: for_external_builds
           path: ./out/for_external_builds/
           if-no-files-found: error
       
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: lib
           path: ./out/lib/
           if-no-files-found: error
       
-      - run: echo "TMP_FILE_NAME=$(basename ./out/python*.wasm)" >> $GITHUB_ENV
-      - uses: actions/upload-artifact@v4
+      - run: echo "WASM_FILE_NAME=$(basename ./out/python*.wasm)" >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.TMP_FILE_NAME }}
-          path: ./out/${{ env.TMP_FILE_NAME }}
+          name: ${{ env.WASM_FILE_NAME }}
+          path: ./out/${{ env.WASM_FILE_NAME }}
           if-no-files-found: error
       
-      - run: echo "TMP_FILE_NAME=$(basename ./out/python*_async.wasm)" >> $GITHUB_ENV
-      - uses: actions/upload-artifact@v4
+      - run: echo "WASM_ASYNC_FILE_NAME=$(basename ./out/python*_async.wasm)" >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.TMP_FILE_NAME }}
-          path: ./out/${{ env.TMP_FILE_NAME }}
+          name: ${{ env.WASM_ASYNC_FILE_NAME }}
+          path: ./out/${{ env.WASM_ASYNC_FILE_NAME }}
           if-no-files-found: error
+      
+      - name: Create/Update release
+        shell: bash
+        run: |
+          RELEASE_TAG="build-python-${{inputs.cpython_branch}}"
+          RELEASE_NAME="CPython - ${{inputs.cpython_branch}}"
+          RELEASE_NOTES_PATH="build-notes.md"
+          zip -r "out.zip" "./out/"
+          zip -r "for_external_builds.zip" "./out/for_external_builds"
+          zip -r "lib.zip" "./out/lib"
+          gh release delete --cleanup-tag --yes "$RELEASE_TAG"
+          gh release create --target "${{github.sha}}" --title "$RELEASE_NAME" --notes-file "$RELEASE_NOTES_PATH" --draft --prerelease "$RELEASE_TAG"
+          gh release upload --clobber "$RELEASE_TAG" "out.zip" "for_external_builds.zip" "lib.zip" "${{ env.WASM_FILE_NAME }}" "${{ env.WASM_ASYNC_FILE_NAME }}"
+          gh release edit "$RELEASE_TAG" --draft=false

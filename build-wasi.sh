@@ -8,8 +8,8 @@ set -e
 
 # Branch of CPython to clone
 # If changed, manually delete ./cpython/ directory if it exists.
-CPYTHON_BRANCH="${CPYTHON_BRANCH:-v3.13.2}"
-# Weather or not to asyncify and optimize using wasm-opt
+CPYTHON_BRANCH="${CPYTHON_BRANCH:-v3.14.3}"
+# Whether or not to asyncify and optimize using wasm-opt
 ASYNCIFY_OPTIMIZE="${ASYNCIFY_OPTIMIZE:-1}"
 OPTIMIZE_LEVEL="${OPTIMIZE_LEVEL:-2}"
 # Export the Python API, this increases output size by a little bit.
@@ -29,7 +29,16 @@ OPT_DEPS_PATH=$(pwd)/deps
 OUT_PATH=$(pwd)/out
 
 # Used for pre-compiling .pyc files
-BUILD_PYTHON_EXE=$(pwd)/cpython/cross-build/build/python
+BUILD_PYTHON_DIR=$(pwd)/cpython/cross-build/x86_64-redhat-linux-gnu
+
+WASI_CFLAGS="-g -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I$OPT_DEPS_PATH/include -DOPENSSL_THREADS"
+WASI_CPPFLAGS="${WASI_CFLAGS}"
+WASI_LDFLAGS="-L$OPT_DEPS_PATH/lib -Wl,--export=malloc -Wl,--export=free"
+
+if [ $EXPORT_PYTHON_API -eq "1" ]
+then
+    WASI_LDFLAGS="$WASI_LDFLAGS -Wl,--export-dynamic"
+fi
 
 # Clone cpython if it's not already cloned.
 if [ ! -d "./cpython" ]
@@ -41,32 +50,27 @@ fi
 # This will also undo if the script errors.
 pushd ./cpython/ > /dev/null
 
-export CFLAGS="-g -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I$OPT_DEPS_PATH/include"
-export CPPFLAGS="${CFLAGS}"
-export LIBS="-L$OPT_DEPS_PATH/lib"
-
-if [ $EXPORT_PYTHON_API -eq "1" ]
-then
-    LINKFORSHARED="-Wl,--export-dynamic"
-fi
-
 # Build python for building python wasi, if it's not already built.
-if [ ! -d "./cross-build/build" ]
+if [ ! -d $BUILD_PYTHON_DIR ]
 then
     echo Building build python
-    python3 Tools/wasm/wasi.py configure-build-python -- --config-cache
-    python3 Tools/wasm/wasi.py make-build-python
+    python3 Tools/wasm/wasi configure-build-python -- --config-cache
+    python3 Tools/wasm/wasi make-build-python
 fi
 
-# For some reason, sometimes we get .exe (probably just with wsl somehow?)
+BUILD_PYTHON_EXE=$BUILD_PYTHON_DIR/python
+# For some reason, sometimes we get .exe
 if [ -f $BUILD_PYTHON_EXE.exe ]; then
     BUILD_PYTHON_EXE=$BUILD_PYTHON_EXE.exe
 fi
 
 # Build python wasi
 echo Building python wasi
-python3 Tools/wasm/wasi.py configure-host -- --config-cache --includedir $OPT_DEPS_PATH/include --libdir $OPT_DEPS_PATH/lib --disable-test-modules --with-lto=full
-python3 Tools/wasm/wasi.py make-host
+python3 Tools/wasm/wasi configure-host -- --config-cache --disable-test-modules --with-lto=full \
+    --includedir $OPT_DEPS_PATH/include --libdir $OPT_DEPS_PATH/lib \
+    --with-openssl=$OPT_DEPS_PATH \
+    CFLAGS="$WASI_CFLAGS" CPPFLAGS="$WASI_CPPFLAGS" LDFLAGS="$WASI_LDFLAGS"
+python3 Tools/wasm/wasi make-host
 
 # 'install' python into ./cross-build/wasm32-wasip1/tmp
 # This gives us the python standard library and some other stuff.
@@ -112,3 +116,9 @@ then
 fi
 
 popd > /dev/null
+
+# Used for github releases.
+echo "# Python $CPYTHON_BRANCH" > build-notes.md
+echo "ASYNCIFY_OPTIMIZE = $ASYNCIFY_OPTIMIZE" >> build-notes.md
+echo "OPTIMIZE_LEVEL = $OPTIMIZE_LEVEL" >> build-notes.md
+echo "EXPORT_PYTHON_API = $EXPORT_PYTHON_API" >> build-notes.md
