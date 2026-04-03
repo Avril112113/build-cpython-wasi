@@ -33,11 +33,12 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - run: echo "REPO_OWNER_LOWER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - name: CPython WASI Build in devcontainer
         uses: devcontainers/ci@v0.3
         with:
-          imageName: ghcr.io/${{ github.repository_owner }}/build_cpython_wasi
-          cacheFrom: ghcr.io/${{ github.repository_owner }}/build_cpython_wasi
+          imageName: ghcr.io/${{ env.REPO_OWNER_LOWER }}/build_cpython_wasi
+          cacheFrom: ghcr.io/${{ env.REPO_OWNER_LOWER }}/build_cpython_wasi
           push: always
           env: |
             CPYTHON_BRANCH=${{ inputs.cpython_branch }}
