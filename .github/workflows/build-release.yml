@@ -88,5 +88,5 @@ jobs:
           zip -r "lib.zip" "./out/lib"
           gh release delete --cleanup-tag --yes "$RELEASE_TAG" || echo "Release didn't exist yet, this is ok."
           gh release create --target "${{github.sha}}" --title "$RELEASE_NAME" --notes-file "$RELEASE_NOTES_PATH" --draft --prerelease "$RELEASE_TAG"
-          gh release upload --clobber "$RELEASE_TAG" "out.zip" "for_external_builds.zip" "lib.zip" "${{ env.WASM_FILE_NAME }}" "${{ env.WASM_ASYNC_FILE_NAME }}"
+          gh release upload --clobber "$RELEASE_TAG" "out.zip" "for_external_builds.zip" "lib.zip" "./out/${{ env.WASM_FILE_NAME }}" "./out/${{ env.WASM_ASYNC_FILE_NAME }}"
           gh release edit "$RELEASE_TAG" --draft=false
