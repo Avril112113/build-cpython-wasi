@@ -48,19 +48,19 @@ fi
 pushd ./cpython/ > /dev/null
 
 # Compile the extra C file to an object file using the WASI-SDK
-echo "Compiling extra_funcs.c..."
+echo "Compiling cooperative_alloc.c..."
 $WASI_SDK_PATH/bin/clang \
     --target=wasm32-wasip1 \
     --sysroot=$WASI_SDK_PATH/share/wasi-sysroot \
     -O$OPTIMIZE_LEVEL \
-    -c ../extra_funcs.c -o ../extra_funcs.o
+    -c ../cooperative_alloc.c -o ../cooperative_alloc.o
 
 export CFLAGS="-g -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I$OPT_DEPS_PATH/include"
 export CPPFLAGS="${CFLAGS}"
 
 # NEW: Update LIBS to include our object file and LDFLAGS to export the symbols
 # We use -Wl,--export to ensure the functions appear in the WASM export table.
-EXTRA_LDFLAGS="-Wl,--export=asyncify_malloc_buffer -Wl,--export=asyncify_free_buffer $(pwd)/../extra_funcs.o"
+EXTRA_LDFLAGS="-Wl,--export=asyncify_malloc_buffer -Wl,--export=asyncify_free_buffer $(pwd)/../cooperative_alloc.o"
 
 export LIBS="-L$OPT_DEPS_PATH/lib"
 
