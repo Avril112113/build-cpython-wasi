@@ -17,6 +17,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    
     steps:
       - name: Checkout (GitHub)
         uses: actions/checkout@v3
