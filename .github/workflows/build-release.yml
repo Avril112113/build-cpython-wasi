@@ -84,9 +84,9 @@ jobs:
           RELEASE_TAG="build-python-${{inputs.cpython_branch}}"
           RELEASE_NAME="CPython - ${{inputs.cpython_branch}}"
           RELEASE_NOTES_PATH="build-notes.md"
-          zip -r "out.zip" "./out/"
-          zip -r "for_external_builds.zip" "./out/for_external_builds"
-          zip -r "lib.zip" "./out/lib"
+          (cd ./out/ && zip -r "../out.zip" *)
+          (cd ./out/for_external_builds/ && zip -r "../../for_external_builds.zip" *)
+          (cd ./out/lib/ && zip -r "../../lib.zip" *)
           gh release delete --cleanup-tag --yes "$RELEASE_TAG" || echo "Release didn't exist yet, this is ok."
           gh release create --target "${{github.sha}}" --title "$RELEASE_NAME" --notes-file "$RELEASE_NOTES_PATH" --draft --prerelease "$RELEASE_TAG"
           gh release upload --clobber "$RELEASE_TAG" "out.zip" "for_external_builds.zip" "lib.zip" "./out/${{ env.WASM_FILE_NAME }}" "./out/${{ env.WASM_ASYNC_FILE_NAME }}"
